@@ -1,3 +1,3 @@
 # My Progress Journal
 ## IE360 Project Report
-[link](IE360-Project-report.html)
+### This is the [link](IE360-Project-report.html) to the IE360 Project report.
