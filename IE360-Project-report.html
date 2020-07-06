@@ -441,6 +441,117 @@ summary {
 <p>Regression models are used when there is relation between two (or more) elements in a time series. In project, price and is_weekend variables are used to understand behavior of sold_count. Arima models and regressions were resulted well in later days because models had more historical data to interpret and reduce autocorrelation.</p>
 <p>In next implementations, basket_count (number of specified product in basket), favorite_count, (number of specified product in customers favorite list), or number of subsidiary products that are sold with primary product can be used to develop different regression models.</p>
 </div>
+<div id="code" class="section level1">
+<h1>Code</h1>
+<p>Since the whole code is too long and same procedure is followed for all products, only the part for forecasting product1 is provided below.</p>
+<pre class="r"><code># this part is main code
+subm_url = &#39;http://167.172.183.67&#39;
+
+u_name = &quot;Group11&quot;
+p_word = &quot;JXTmcp8U2quxX93W&quot;
+submit_now = FALSE
+username = u_name
+password = p_word
+require(xts)
+require(forecast)
+library(timeDate)
+token = get_token(username=u_name, password=p_word, url=subm_url)
+data = get_data(token=token,url=subm_url)
+data[,.N,list(product_content_id)]
+data[,day:=weekdays(event_date)]
+data[,is_weekend:=ifelse(isWeekend(event_date),1,0)]
+data[,logsales:=log(sold_count)]
+data[,logprice:=log(price)]
+product1=data[product_content_id==31515569]
+filtered_product1=product1[as.Date(event_date)&gt;&#39;2020-01-02&#39;]
+filtered_product1=filtered_product1[order(event_date)]
+filtered_product1[,event_date:=as.Date(event_date)]
+filtered_product1=filtered_product1[,list(product_content_id,event_date,price,sold_count,is_weekend,day)]
+filtered_product1[,lag2_forecast:=shift(sold_count,2)]
+filtered_product1[,lag7_forecast:=shift(sold_count,7)]
+dates1&lt;- seq(as.Date(&quot;2020-01-03&quot;), length = 150, by = &quot;days&quot;)
+filtered_product1_xts &lt;- xts(filtered_product1[,&quot;sold_count&quot;], order.by = dates1)
+filtered_product1_xts_train &lt;- filtered_product1_xts[index(filtered_product1_xts) &lt; &quot;2020-05-01&quot;]
+filtered_product1_xts_valid &lt;- filtered_product1_xts[index(filtered_product1_xts) &gt;= &quot;2020-05-01&quot;]
+arima1&lt;-auto.arima(filtered_product1_xts_train)
+forecast_arima1 &lt;- forecast(arima1, h = 31)
+for_dates &lt;- seq(as.Date(&quot;2020-05-01&quot;), length = 31, by = &quot;days&quot;)
+for_arima1_xts &lt;- xts(forecast_arima1$mean, order.by = for_dates)
+for_arima1 &lt;- as.numeric(forecast_arima1$mean)
+v_product1 &lt;- as.numeric(filtered_product1_xts_valid)
+MSEarima1 &lt;- mean((for_arima1 - v_product1)^2)
+MSEarima1
+ets1&lt;-ets(filtered_product1_xts_train)
+ets1
+arima1
+filtered_product1_xts_2&lt;- xts(filtered_product1,order.by=dates1)
+filtered_product1_xts_2_train &lt;- filtered_product1_xts_2[index(filtered_product1_xts_2) &lt; &quot;2020-05-01&quot;]
+sold_1 &lt;- as.vector(as.numeric(filtered_product1_xts_2_train[,&quot;sold_count&quot;]))
+price_1 &lt;- as.vector(as.numeric(filtered_product1_xts_2_train[,&quot;price&quot;]))
+reg_train_1 &lt;- data.frame(sold_1, price_1)
+colnames(reg_train_1) &lt;- c(&quot;sales&quot;, &quot;price&quot;)
+model_reg1 &lt;- lm(sales ~ price, data = reg_train_1)
+model_reg1
+summary(model_reg1)
+filtered_product1_xts_2_test=filtered_product1[as.Date(event_date)&gt;&#39;2020-04-30&#39;]
+reg_sales_1=predict(model_reg1,filtered_product1_xts_2_test)
+for_sold_xtsreg &lt;- xts(reg_sales_1, order.by = for_dates)
+for_sold_reg&lt;- as.numeric(for_sold_xtsreg)
+mseregprice1 &lt;- mean((for_sold_reg - v_product1)^2)
+mseregprice1
+filtered_product1_train=filtered_product1[event_date&lt;&#39;2020-05-01&#39;]
+filtered_product1_test=filtered_product1[event_date&gt;&#39;2020-04-30&#39;]
+day_reg_model1&lt;-lm(sold_count~price+is_weekend,data=filtered_product1_train)
+reg_sales_day_1 &lt;- predict(day_reg_model1,filtered_product1_test)
+for_sold_xtsreg_day_1&lt;-xts(reg_sales_day_1,order.by=for_dates)
+for_sold_reg_day_1&lt;-as.numeric(for_sold_xtsreg_day_1)
+mseregdayprice1&lt;-mean((for_sold_reg_day_1-v_product1)^2)
+mseregdayprice1
+day_reg_model1
+summary(day_reg_model1)
+filtered_product1[,ma_2:=frollmean(shift(sold_count,2),2,align=&quot;right&quot;)]
+filtered_product1[,ma_3:=frollmean(shift(sold_count,2),3,align=&quot;right&quot;)]
+filtered_product1[,ma_4:=frollmean(shift(sold_count,2),4,align=&quot;right&quot;)]
+filtered_product1[,ma_5:=frollmean(shift(sold_count,2),5,align=&quot;right&quot;)]
+filtered_product1[,ma_6:=frollmean(shift(sold_count,2),6,align=&quot;right&quot;)]
+filtered_product1[,ma_7:=frollmean(shift(sold_count,2),7,align=&quot;right&quot;)]
+test_start=as.Date(&#39;2020-05-01&#39;)
+test_end=max(filtered_product1$event_date) #last available date
+
+# creating necessary objects to store tests
+nof_test_days=as.numeric(test_end-test_start)+1
+predictions1=vector(&#39;list&#39;,nof_test_days)
+for(i in 1:nof_test_days){
+  forecast_day=test_start+i-1
+  # filtering the forecast date&#39;s predictor values
+  naive_forecast1=filtered_product1[event_date==forecast_day,list(event_date,lag2_forecast,lag7_forecast,ma_2,ma_3,ma_4,ma_5,ma_6,ma_7)]
+  # use available data which is data starting from yesterday (i.e. forecast_day - 2)
+  # predict using learned linear regression model
+  # add it to result data.table as a column
+  #store in the list
+  predictions1[[i]]=naive_forecast1
+}
+pred_datatable1=rbindlist(predictions1)
+pred_datatable1=merge(pred_datatable1,filtered_product1[,list(event_date,sold_count)],by=&#39;event_date&#39;)
+
+head(pred_datatable1,5)
+ts1&lt;-ts(filtered_product1$sold_count,start=c(2020,01,03),frequency = 365)
+ts.plot(ts1,xlab = &quot;Date&quot;, ylab = &quot;Sales&quot;,main=&quot;Sales of Product 1&quot;)
+diff1&lt;- diff(filtered_product1$sold_count)
+plot(diff1)
+summary(diff1)
+acf(filtered_product1$sold_count)
+
+#Box.test(filtered_product1$sold_count,lag=14)
+melted=melt(pred_datatable1,id.vars=c(1,10))
+summary_result1=melted[,list(se=(value-sold_count)^2,
+                             ad=abs(value-sold_count),
+                             ape=abs(value-sold_count)/sold_count,sold_count),by=list(event_date,variable)]
+summary_result1[,list(mse=mean(se),mad=mean(ad),mape=mean(ape),quantile90=quantile(ape,0.9)),by=list(variable)]
+fitarima1 &lt;- arima(filtered_product1_xts, order=c(1,1,1))
+fit1&lt;-predict(fitarima1, n.ahead = 2)$pred
+fit1</code></pre>
+</div>
 
 
 
